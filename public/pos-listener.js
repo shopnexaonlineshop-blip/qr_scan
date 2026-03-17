@@ -3,6 +3,29 @@
   const ROOM_ID = window.QR_SYNC_ROOM_ID || "pos-room";
   const APPEND_MODE = window.QR_SYNC_APPEND_MODE || false;
 
+  let lastFocusedElement = null;
+
+  document.addEventListener(
+    "focusin",
+    (e) => {
+      const el = e.target;
+      if (!el) return;
+
+      const tag = el.tagName?.toLowerCase();
+      const type = (el.type || "").toLowerCase();
+
+      const isTextInput =
+        tag === "textarea" ||
+        (tag === "input" &&
+          !["checkbox", "radio", "file", "button", "submit", "reset"].includes(type));
+
+      if (isTextInput || el.isContentEditable) {
+        lastFocusedElement = el;
+      }
+    },
+    true
+  );
+
   const script = document.createElement("script");
   script.src = SERVER_URL + "/socket.io/socket.io.js";
 
@@ -24,16 +47,46 @@
       fillFocusedElement(text);
     });
 
+    function setNativeValue(element, value) {
+      const tag = element.tagName?.toLowerCase();
+
+      let prototype;
+      if (tag === "textarea") {
+        prototype = window.HTMLTextAreaElement.prototype;
+      } else if (tag === "input") {
+        prototype = window.HTMLInputElement.prototype;
+      } else {
+        element.textContent = value;
+        return;
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+      const setter = descriptor && descriptor.set;
+
+      if (setter) {
+        setter.call(element, value);
+      } else {
+        element.value = value;
+      }
+    }
+
+    function triggerReactEvents(element) {
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+    }
+
     function fillFocusedElement(text) {
-      const el = document.activeElement;
+      const el = lastFocusedElement || document.activeElement;
 
       if (!el) {
-        alert("No active input selected");
+        console.log("No focused input found");
         return;
       }
 
       const tag = el.tagName?.toLowerCase();
       const type = (el.type || "").toLowerCase();
+
       const isTextInput =
         tag === "textarea" ||
         (tag === "input" &&
@@ -43,40 +96,20 @@
         const oldValue = el.value || "";
         const newValue = APPEND_MODE ? oldValue + text : text;
 
-        const nativeSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
-          "value"
-        )?.set || Object.getOwnPropertyDescriptor(
-          window.HTMLTextAreaElement.prototype,
-          "value"
-        )?.set;
-
-        if (nativeSetter) {
-          nativeSetter.call(el, newValue);
-        } else {
-          el.value = newValue;
-        }
-
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-        el.dispatchEvent(new Event("change", { bubbles: true }));
+        setNativeValue(el, newValue);
+        triggerReactEvents(el);
         el.focus();
         return;
       }
 
       if (el.isContentEditable) {
-        if (APPEND_MODE) {
-          el.textContent = (el.textContent || "") + text;
-        } else {
-          el.textContent = text;
-        }
-
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-        el.dispatchEvent(new Event("change", { bubbles: true }));
+        el.textContent = APPEND_MODE ? (el.textContent || "") + text : text;
+        triggerReactEvents(el);
         el.focus();
         return;
       }
 
-      alert("Focused element is not a text input");
+      console.log("Focused element is not supported");
     }
   };
 
