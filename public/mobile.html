@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mobile QR Scanner</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #0f172a;
+      color: white;
+      padding: 20px;
+    }
+    .box {
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    .card {
+      background: #1e293b;
+      padding: 16px;
+      border-radius: 14px;
+      margin-bottom: 16px;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+    input {
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: white;
+    }
+    button {
+      cursor: pointer;
+    }
+    .btn1 { background: #22c55e; color: white; }
+    .btn2 { background: #ef4444; color: white; }
+    .btn3 { background: #3b82f6; color: white; }
+    #reader {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .result {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 10px;
+      word-break: break-word;
+      min-height: 50px;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Scan QR and send to POS</h2>
+
+    <div class="card">
+      <input id="roomId" placeholder="Room ID" />
+      <button class="btn3" id="joinBtn">Join Room</button>
+      <div id="joinMsg">Not joined</div>
+    </div>
+
+    <div class="card">
+      <div id="reader"></div>
+      <button class="btn1" id="startBtn">Start Scanner</button>
+      <button class="btn2" id="stopBtn">Stop Scanner</button>
+    </div>
+
+    <div class="card">
+      <strong>Last scanned:</strong>
+      <div class="result" id="lastScan">No scan yet</div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+
+    const roomInput = document.getElementById("roomId");
+    const joinBtn = document.getElementById("joinBtn");
+    const joinMsg = document.getElementById("joinMsg");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const lastScan = document.getElementById("lastScan");
+
+    const params = new URLSearchParams(location.search);
+    const roomFromUrl = params.get("room") || "pos-room";
+    roomInput.value = roomFromUrl;
+
+    let activeRoom = roomFromUrl;
+    let scanner = null;
+    let scannerRunning = false;
+    let lastText = "";
+    let lastTime = 0;
+
+    function joinRoom() {
+      const roomId = roomInput.value.trim();
+      if (!roomId) {
+        alert("Enter room ID");
+        return;
+      }
+      activeRoom = roomId;
+      socket.emit("join-room", roomId);
+    }
+
+    joinBtn.addEventListener("click", joinRoom);
+
+    socket.on("joined-room", (roomId) => {
+      joinMsg.textContent = "Joined room: " + roomId;
+    });
+
+    async function startScanner() {
+      if (scannerRunning) return;
+
+      joinRoom();
+      scanner = new Html5Qrcode("reader");
+
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
+          },
+          (decodedText) => {
+            const now = Date.now();
+
+            if (decodedText === lastText && now - lastTime < 1500) return;
+
+            lastText = decodedText;
+            lastTime = now;
+
+            lastScan.textContent = decodedText;
+
+            socket.emit("scanned-data", {
+              roomId: activeRoom,
+              text: decodedText
+            });
+          },
+          () => {}
+        );
+
+        scannerRunning = true;
+      } catch (err) {
+        alert("Camera start failed: " + err);
+      }
+    }
+
+    async function stopScanner() {
+      if (!scanner || !scannerRunning) return;
+
+      try {
+        await scanner.stop();
+        await scanner.clear();
+        scannerRunning = false;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    startBtn.addEventListener("click", startScanner);
+    stopBtn.addEventListener("click", stopScanner);
+
+    window.addEventListener("load", joinRoom);
+  </script>
+</body>
+</html>
