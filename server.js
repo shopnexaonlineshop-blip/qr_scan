@@ -1,21 +1,22 @@
 const express = require("express");
 const http = require("http");
-const { Server } = require("socket.io");
 const path = require("path");
+const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*"
+    origin: "*",
+    methods: ["GET", "POST"]
   }
 });
 
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
-  res.redirect("/pos-demo.html");
+  res.redirect("/mobile.html");
 });
 
 io.on("connection", (socket) => {
@@ -25,7 +26,7 @@ io.on("connection", (socket) => {
     if (!roomId) return;
     socket.join(roomId);
     socket.emit("joined-room", roomId);
-    console.log(`${socket.id} joined ${roomId}`);
+    console.log(`${socket.id} joined room ${roomId}`);
   });
 
   socket.on("scanned-data", ({ roomId, text }) => {
@@ -33,10 +34,10 @@ io.on("connection", (socket) => {
 
     io.to(roomId).emit("receive-scanned-data", {
       text,
-      time: new Date().toISOString()
+      time: Date.now()
     });
 
-    console.log(`ROOM ${roomId} => ${text}`);
+    console.log(`ROOM ${roomId}: ${text}`);
   });
 
   socket.on("disconnect", () => {
@@ -44,7 +45,7 @@ io.on("connection", (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
