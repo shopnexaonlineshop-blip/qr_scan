@@ -3,75 +3,87 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mobile QR Scanner</title>
+  <title>QR Scanner</title>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
       margin: 0;
+      padding: 20px;
       background: #0f172a;
       color: white;
-      padding: 20px;
+      font-family: Arial, sans-serif;
     }
-    .box {
-      max-width: 500px;
+
+    .wrap {
+      max-width: 460px;
       margin: 0 auto;
     }
+
     .card {
       background: #1e293b;
+      border-radius: 16px;
       padding: 16px;
-      border-radius: 14px;
       margin-bottom: 16px;
     }
+
+    h2 {
+      margin-top: 0;
+    }
+
     input, button {
       width: 100%;
       padding: 12px;
       border-radius: 10px;
-      border: none;
-      margin-bottom: 10px;
       font-size: 16px;
+      margin-bottom: 10px;
+      box-sizing: border-box;
     }
+
     input {
       border: 1px solid #475569;
       background: #0f172a;
       color: white;
     }
+
     button {
+      border: none;
       cursor: pointer;
     }
-    .btn1 { background: #22c55e; color: white; }
-    .btn2 { background: #ef4444; color: white; }
-    .btn3 { background: #3b82f6; color: white; }
+
+    .btn-blue { background: #3b82f6; color: white; }
+    .btn-green { background: #22c55e; color: white; }
+    .btn-red { background: #ef4444; color: white; }
+
     #reader {
       background: white;
       border-radius: 12px;
       overflow: hidden;
     }
+
     .result {
+      min-height: 50px;
       background: #0f172a;
       border: 1px solid #334155;
       border-radius: 10px;
       padding: 10px;
       word-break: break-word;
-      min-height: 50px;
     }
   </style>
 </head>
 <body>
-  <div class="box">
-    <h2>Scan QR and send to POS</h2>
-
+  <div class="wrap">
     <div class="card">
+      <h2>Hosted QR Scanner</h2>
       <input id="roomId" placeholder="Room ID" />
-      <button class="btn3" id="joinBtn">Join Room</button>
-      <div id="joinMsg">Not joined</div>
+      <button class="btn-blue" id="joinBtn">Join Room</button>
+      <div id="joinStatus">Not joined</div>
     </div>
 
     <div class="card">
       <div id="reader"></div>
-      <button class="btn1" id="startBtn">Start Scanner</button>
-      <button class="btn2" id="stopBtn">Stop Scanner</button>
+      <button class="btn-green" id="startBtn">Start Scanner</button>
+      <button class="btn-red" id="stopBtn">Stop Scanner</button>
     </div>
 
     <div class="card">
@@ -82,38 +94,37 @@
 
   <script>
     const socket = io();
+    const params = new URLSearchParams(window.location.search);
 
-    const roomInput = document.getElementById("roomId");
+    const roomIdInput = document.getElementById("roomId");
     const joinBtn = document.getElementById("joinBtn");
-    const joinMsg = document.getElementById("joinMsg");
+    const joinStatus = document.getElementById("joinStatus");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
     const lastScan = document.getElementById("lastScan");
 
-    const params = new URLSearchParams(location.search);
-    const roomFromUrl = params.get("room") || "pos-room";
-    roomInput.value = roomFromUrl;
+    roomIdInput.value = params.get("room") || "shop-counter-1";
 
-    let activeRoom = roomFromUrl;
+    let currentRoom = roomIdInput.value;
     let scanner = null;
     let scannerRunning = false;
     let lastText = "";
     let lastTime = 0;
 
     function joinRoom() {
-      const roomId = roomInput.value.trim();
-      if (!roomId) {
+      const room = roomIdInput.value.trim();
+      if (!room) {
         alert("Enter room ID");
         return;
       }
-      activeRoom = roomId;
-      socket.emit("join-room", roomId);
+      currentRoom = room;
+      socket.emit("join-room", room);
     }
 
     joinBtn.addEventListener("click", joinRoom);
 
-    socket.on("joined-room", (roomId) => {
-      joinMsg.textContent = "Joined room: " + roomId;
+    socket.on("joined-room", (room) => {
+      joinStatus.textContent = "Joined room: " + room;
     });
 
     async function startScanner() {
@@ -125,10 +136,7 @@
       try {
         await scanner.start(
           { facingMode: "environment" },
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 }
-          },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
           (decodedText) => {
             const now = Date.now();
 
@@ -140,7 +148,7 @@
             lastScan.textContent = decodedText;
 
             socket.emit("scanned-data", {
-              roomId: activeRoom,
+              roomId: currentRoom,
               text: decodedText
             });
           },
@@ -167,7 +175,6 @@
 
     startBtn.addEventListener("click", startScanner);
     stopBtn.addEventListener("click", stopScanner);
-
     window.addEventListener("load", joinRoom);
   </script>
 </body>
